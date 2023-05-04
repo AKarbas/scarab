@@ -51,6 +51,8 @@
 #include "cmp_model.h"
 #include "prefetcher/l2l1pref.h"
 
+#include "libs/hash_lib.h"
+
 /**************************************************************************************/
 /* Macros */
 
@@ -62,6 +64,8 @@
 /* Global Variables */
 
 Dcache_Stage* dc = NULL;
+Hash_Table    seen_addresses;
+Flag          seen_addresses_initialized = FALSE;
 
 /**************************************************************************************/
 /* set_dcache_stage: */
@@ -429,6 +433,7 @@ void update_dcache_stage(Stage_Data* src_sd) {
             STAT_EVENT(op->proc_id, DCACHE_MISS);
             STAT_EVENT(op->proc_id, DCACHE_MISS_ONPATH);
             STAT_EVENT(op->proc_id, DCACHE_MISS_LD_ONPATH);
+            stat_dcache_miss_type(op, &line_addr);
             op->oracle_info.dcmiss = TRUE;
             STAT_EVENT(op->proc_id, DCACHE_MISS_LD);
           } else {
@@ -484,6 +489,7 @@ void update_dcache_stage(Stage_Data* src_sd) {
             STAT_EVENT(op->proc_id, DCACHE_MISS);
             STAT_EVENT(op->proc_id, DCACHE_MISS_ONPATH);
             STAT_EVENT(op->proc_id, DCACHE_MISS_LD_ONPATH);
+            stat_dcache_miss_type(op, &line_addr);
             op->oracle_info.dcmiss = TRUE;
             STAT_EVENT(op->proc_id, DCACHE_MISS_LD);
           } else {
@@ -542,6 +548,7 @@ void update_dcache_stage(Stage_Data* src_sd) {
             STAT_EVENT(op->proc_id, DCACHE_MISS);
             STAT_EVENT(op->proc_id, DCACHE_MISS_ONPATH);
             STAT_EVENT(op->proc_id, DCACHE_MISS_ST_ONPATH);
+            stat_dcache_miss_type(op, &line_addr);
             op->oracle_info.dcmiss = TRUE;
             STAT_EVENT(op->proc_id, DCACHE_MISS_ST);
           } else {
@@ -584,6 +591,34 @@ void update_dcache_stage(Stage_Data* src_sd) {
     update_l2markv_pref_req_queue();
 }
 
+/**************************************************************************************/
+/* stat_dcache_miss_type: */
+
+void stat_dcache_miss_type(Op* op, Addr* line_addr) {
+  if(!seen_addresses_initialized) {
+    seen_addresses_initialized = TRUE;
+    init_hash_table(&seen_addresses, "dcache_miss_type-seen_addresses",
+                    1ULL << 20, sizeof(*line_addr));
+  }
+
+  Flag unseen_line = FALSE;
+  hash_table_access_create(&seen_addresses, *line_addr, &unseen_line);
+
+  if(unseen_line) {
+    STAT_EVENT(op->proc_id, DCACHE_MISS_COMPULSORY);
+    return;
+  }
+
+  for(int set_idx = 0; set_idx < dc->dcache.num_sets; set_idx++) {
+    for(int line_idx = 0; line_idx < dc->dcache.assoc; line_idx++) {
+      if(!dc->dcache.entries[set_idx][line_idx].valid) {
+        STAT_EVENT(op->proc_id, DCACHE_MISS_CONFLICT);
+        return;
+      }
+    }
+  }
+  STAT_EVENT(op->proc_id, DCACHE_MISS_CAPACITY);
+}
 
 /**************************************************************************************/
 /* dcache_fill_line: */

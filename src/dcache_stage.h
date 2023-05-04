@@ -99,6 +99,7 @@ void wp_process_dcache_fill(Dcache_Data* line, Mem_Req* req);
 Flag dcache_fill_line(Mem_Req*);
 void update_iso_miss(Op*);
 Flag do_oracle_dcache_access(Op*, Addr*);
+void stat_dcache_miss_type(Op*, Addr*);
 
 /**************************************************************************************/
 
