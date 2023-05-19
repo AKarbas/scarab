@@ -246,37 +246,30 @@ void* cache_access(Cache* cache, Addr addr, Addr* line_addr, Flag update_repl) {
         // CacheSize = Line Size * Num Lines
         // FullAssociativity = Num Lines(?) TODO
         // Replace policy?
-        init_cache(victim_cache, "VICTIM_CACHE", L1_LINE_SIZE * VICTIM_CACHE_SIZE, VICTIM_CACHE_SIZE, L1_LINE_SIZE, sizeof(L1_Data), L1_CACHE_REPL_POLICY)
+        init_cache(victim_cache, "VICTIM_CACHE", L1_LINE_SIZE * VICTIM_CACHE_SIZE, VICTIM_CACHE_SIZE, L1_LINE_SIZE, cache->data_size, REPL_TRUE_LRU)
       }
 
       for(ii = 0; ii < victim_cache->assoc; ii++) {
         Cache_Entry* line = &victim_cache->entries[set][ii];
-        Addr* victim_line_addr;
-        Addr* victim_repl_line_addr;
+        Addr l1_line_addr,victim_line_addr;
+        Addr l1_repl_line_addr,victim_repl_line_addr; 
+        Flag valid;
 
         //victim cache hit 
         if(line->valid && line->tag == tag) {
-          //insert cache line into L1 cache
-          //Figure out procId
-          cache_insert(cache, 0, addr, victim_line_addr, victim_repl_line_addr);
 
-          //get LRU in L1 and put it in victim
+          //cache entry that is about to replaced in L1
+          //Cache* cache, uns8 proc_id, Addr addr,
+          //Addr* repl_line_addr, Flag* vali
+          void* data = get_next_repl_line(cache,line->proc_id, addr, &l1_repl_line_addr, &valid);
 
-          /* update replacement state if necessary */
-          ASSERT(0, line->data);
-          DEBUG(0, "Found line in cache '%s' at (set %u, way %u, base 0x%s)\n",
-                cache->name, set, ii, hexstr64s(line->base));
+          //insert victim cache line into L1 cache
+          cache_insert(cache, line->proc_id, addr, &victim_line_addr, &victim_repl_line_addr);
 
-          if(update_repl) {
-            if(line->pref) {
-              line->pref = FALSE;
-            }
-            victim_cache->num_demand_access++;
-            update_repl_policy(victim_cache, line, set, ii, FALSE);
-          }
+          //insert in victim cache the entry that was just evicted from l1
+          cache_insert(victim_cache,line->proc_id,l1_repl_line_addr,&victim_line_addr, &victim_repl_line_addr);
 
-
-
+          //get LRU in victim Cache and do something?
           //return hit line
           return line->data;
         }
