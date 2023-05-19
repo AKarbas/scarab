@@ -66,6 +66,8 @@ static inline void         invalidate_unsure_line(Cache*, uns, Addr);
 /* Global Variables */
 
 char rand_repl_state[31];
+Cache* victim_cache;
+Flag victim_cache_initialized = FALSE;
 
 
 /**************************************************************************************/
@@ -213,6 +215,7 @@ void* cache_access(Cache* cache, Addr addr, Addr* line_addr, Flag update_repl) {
   for(ii = 0; ii < cache->assoc; ii++) {
     Cache_Entry* line = &cache->entries[set][ii];
 
+    //If the line tag matches given tag its a hit!
     if(line->valid && line->tag == tag) {
       /* update replacement state if necessary */
       ASSERT(0, line->data);
@@ -226,10 +229,62 @@ void* cache_access(Cache* cache, Addr addr, Addr* line_addr, Flag update_repl) {
         cache->num_demand_access++;
         update_repl_policy(cache, line, set, ii, FALSE);
       }
-
+      //return hit line
       return line->data;
     }
   }
+
+  //if no line its a miss
+  //try to access victim cache, if a hit here then adjust accordingly, and return the right line
+  if(VICTIM_CACHE_SIZE != 0){
+    //If cache is L1 cache try victim cache
+    if(strcmp(cache->name,"L1_CACHE")){
+      //Lazy initialize 
+      if(!victim_cache_initialized){
+        victim_cache_initialized = TRUE;
+        //imitate L1 cache in properties except for lines and associativity
+        // CacheSize = Line Size * Num Lines
+        // FullAssociativity = Num Lines(?) TODO
+        // Replace policy?
+        init_cache(victim_cache, "VICTIM_CACHE", L1_LINE_SIZE * VICTIM_CACHE_SIZE, VICTIM_CACHE_SIZE, L1_LINE_SIZE, sizeof(L1_Data), L1_CACHE_REPL_POLICY)
+      }
+
+      for(ii = 0; ii < victim_cache->assoc; ii++) {
+        Cache_Entry* line = &victim_cache->entries[set][ii];
+        Addr* victim_line_addr;
+        Addr* victim_repl_line_addr;
+
+        //victim cache hit 
+        if(line->valid && line->tag == tag) {
+          //insert cache line into L1 cache
+          //Figure out procId
+          cache_insert(cache, 0, addr, victim_line_addr, victim_repl_line_addr);
+
+          //get LRU in L1 and put it in victim
+
+          /* update replacement state if necessary */
+          ASSERT(0, line->data);
+          DEBUG(0, "Found line in cache '%s' at (set %u, way %u, base 0x%s)\n",
+                cache->name, set, ii, hexstr64s(line->base));
+
+          if(update_repl) {
+            if(line->pref) {
+              line->pref = FALSE;
+            }
+            victim_cache->num_demand_access++;
+            update_repl_policy(victim_cache, line, set, ii, FALSE);
+          }
+
+
+
+          //return hit line
+          return line->data;
+        }
+      }
+    } 
+  }
+
+
   /* if it's a miss and we're doing ideal replacement, look in the unsure list
    */
   if(cache->repl_policy == REPL_IDEAL) {

@@ -98,6 +98,12 @@ DEF_PARAM(constant_memory_latency, CONSTANT_MEMORY_LATENCY, Flag, Flag, FALSE, )
 DEF_PARAM(memory_cycles, MEMORY_CYCLES, uns, uns, 100, )
 DEF_PARAM(stall_mem_reqs_only, STALL_MEM_REQS_ONLY, Flag, Flag, FALSE, )
 
+
+/* VICTIM CACHE*/
+//Value set to 0 as default, any value will instantiate victim cache
+DEF_PARAM(victim_cache_size, VICTIM_CACHE_SIZE, uns, uns, 0, )
+
+
 /* Icache */
 DEF_PARAM(icache_size, ICACHE_SIZE, uns, uns,
           (64 * 1024), )                             /* total size in bytes */
