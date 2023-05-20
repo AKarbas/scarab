@@ -70,7 +70,7 @@ Cache* victim_cache;
 Flag   victim_cache_initialized = FALSE;
 
 
-void victim_cache_lazy_init(uns data_size) {
+inline void victim_cache_lazy_init(uns data_size) {
   if(!victim_cache_initialized) {
     victim_cache_initialized = TRUE;
     init_cache(victim_cache, "VICTIM_CACHE", VICTIM_CACHE_SIZE * L1_LINE_SIZE,
@@ -253,9 +253,6 @@ void* cache_access(Cache* cache, Addr addr, Addr* line_addr, Flag update_repl) {
       Cache_Entry* victim_line = &victim_cache->entries[0][ii];
       // victim cache hit
       if(victim_line->valid && victim_line->tag == tag) {
-        Addr l1_line_addr, victim_line_addr;
-        Addr l1_repl_line_addr, victim_repl_line_addr;
-        Flag valid;
         uns  l1_way;
 
         // swap with L1 lru
@@ -333,7 +330,6 @@ void* cache_insert_replpos(Cache* cache, uns8 proc_id, Addr addr,
                            Cache_Insert_Repl insert_repl_policy,
                            Flag              isPrefetch) {
   Addr         tag;
-  uns          ii;
   uns          repl_index;
   uns          set = cache_index(cache, addr, &tag, line_addr);
   Cache_Entry* new_line;
