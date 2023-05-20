@@ -65,15 +65,15 @@ static inline void         invalidate_unsure_line(Cache*, uns, Addr);
 /**************************************************************************************/
 /* Global Variables */
 
-char   rand_repl_state[31];
-Cache* victim_cache;
-Flag   victim_cache_initialized = FALSE;
+char  rand_repl_state[31];
+Cache victim_cache;
+Flag  victim_cache_initialized = FALSE;
 
 
 inline void victim_cache_lazy_init(uns data_size) {
   if(!victim_cache_initialized) {
     victim_cache_initialized = TRUE;
-    init_cache(victim_cache, "VICTIM_CACHE", VICTIM_CACHE_SIZE * L1_LINE_SIZE,
+    init_cache(&victim_cache, "VICTIM_CACHE", VICTIM_CACHE_SIZE * L1_LINE_SIZE,
                VICTIM_CACHE_SIZE, L1_LINE_SIZE, data_size, REPL_TRUE_LRU);
   }
 }
@@ -249,11 +249,11 @@ void* cache_access(Cache* cache, Addr addr, Addr* line_addr, Flag update_repl) {
   if(VICTIM_CACHE_SIZE != 0 && strcmp(cache->name, "L1_CACHE")) {
     victim_cache_lazy_init(cache->data_size);
 
-    for(ii = 0; ii < victim_cache->assoc; ii++) {
-      Cache_Entry* victim_line = &victim_cache->entries[0][ii];
+    for(ii = 0; ii < victim_cache.assoc; ii++) {
+      Cache_Entry* victim_line = &victim_cache.entries[0][ii];
       // victim cache hit
       if(victim_line->valid && victim_line->tag == tag) {
-        uns  l1_way;
+        uns l1_way;
 
         // swap with L1 lru
         Cache_Entry* l1_line = find_repl_entry(cache, victim_line->proc_id, set,
@@ -273,8 +273,8 @@ void* cache_access(Cache* cache, Addr addr, Addr* line_addr, Flag update_repl) {
 
         // update victim LRU policy
         if(victim_line->valid) {
-          victim_cache->num_demand_access++;
-          update_repl_policy(victim_cache, victim_line, 0, ii, FALSE);
+          victim_cache.num_demand_access++;
+          update_repl_policy(&victim_cache, victim_line, 0, ii, FALSE);
         }
 
         return l1_line->data;
@@ -345,7 +345,7 @@ void* cache_insert_replpos(Cache* cache, uns8 proc_id, Addr addr,
        strcmp(cache->name, "L1_CACHE")) {
       victim_cache_lazy_init(cache->data_size);
       uns          victim_way;
-      Cache_Entry* victim_line = find_repl_entry(victim_cache, proc_id, 0,
+      Cache_Entry* victim_line = find_repl_entry(&victim_cache, proc_id, 0,
                                                  &victim_way);
       Cache_Entry  temp_line   = *new_line;
       *new_line                = *victim_line;
@@ -512,7 +512,7 @@ void* get_next_repl_line(Cache* cache, uns8 proc_id, Addr addr,
   if(new_line->valid && VICTIM_CACHE_SIZE != 0 &&
      strcmp(cache->name, "L1_CACHE")) {
     victim_cache_lazy_init(cache->data_size);
-    return get_next_repl_line(victim_cache, proc_id, addr, repl_line_addr,
+    return get_next_repl_line(&victim_cache, proc_id, addr, repl_line_addr,
                               valid);
   }
 
@@ -1037,7 +1037,7 @@ void* cache_insert_lru(Cache* cache, uns8 proc_id, Addr addr, Addr* line_addr,
        strcmp(cache->name, "L1_CACHE")) {
       victim_cache_lazy_init(cache->data_size);
       uns          victim_way;
-      Cache_Entry* victim_line = find_repl_entry(victim_cache, proc_id, 0,
+      Cache_Entry* victim_line = find_repl_entry(&victim_cache, proc_id, 0,
                                                  &victim_way);
       Cache_Entry  temp_line   = *new_line;
       *new_line                = *victim_line;
