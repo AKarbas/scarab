@@ -71,6 +71,7 @@ Flag  victim_cache_initialized = FALSE;
 
 
 inline void victim_cache_lazy_init(uns data_size) {
+  data_size = 72;  // hack...
   if(!victim_cache_initialized) {
     victim_cache_initialized = TRUE;
     init_cache(&victim_cache, "VICTIM_CACHE", VICTIM_CACHE_SIZE * L1_LINE_SIZE,
