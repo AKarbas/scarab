@@ -65,9 +65,18 @@ static inline void         invalidate_unsure_line(Cache*, uns, Addr);
 /**************************************************************************************/
 /* Global Variables */
 
-char rand_repl_state[31];
+char   rand_repl_state[31];
 Cache* victim_cache;
-Flag victim_cache_initialized = FALSE;
+Flag   victim_cache_initialized = FALSE;
+
+
+void victim_cache_lazy_init(uns data_size) {
+  if(!victim_cache_initialized) {
+    victim_cache_initialized = TRUE;
+    init_cache(victim_cache, "VICTIM_CACHE", VICTIM_CACHE_SIZE * L1_LINE_SIZE,
+               VICTIM_CACHE_SIZE, L1_LINE_SIZE, data_size, REPL_TRUE_LRU);
+  }
+}
 
 
 /**************************************************************************************/
@@ -215,7 +224,7 @@ void* cache_access(Cache* cache, Addr addr, Addr* line_addr, Flag update_repl) {
   for(ii = 0; ii < cache->assoc; ii++) {
     Cache_Entry* line = &cache->entries[set][ii];
 
-    //If the line tag matches given tag its a hit!
+    // If the line tag matches given tag its a hit!
     if(line->valid && line->tag == tag) {
       /* update replacement state if necessary */
       ASSERT(0, line->data);
@@ -229,52 +238,51 @@ void* cache_access(Cache* cache, Addr addr, Addr* line_addr, Flag update_repl) {
         cache->num_demand_access++;
         update_repl_policy(cache, line, set, ii, FALSE);
       }
-      //return hit line
+      // return hit line
       return line->data;
     }
   }
 
-  //if no line its a miss
-  //try to access victim cache, if a hit here then adjust accordingly, and return the right line
-  if(VICTIM_CACHE_SIZE != 0){
-    //If cache is L1 cache try victim cache
-    if(strcmp(cache->name,"L1_CACHE")){
-      //Lazy initialize 
-      if(!victim_cache_initialized){
-        victim_cache_initialized = TRUE;
-        //imitate L1 cache in properties except for lines and associativity
-        // CacheSize = Line Size * Num Lines
-        // FullAssociativity = Num Lines(?) TODO
-        // Replace policy?
-        init_cache(victim_cache, "VICTIM_CACHE", L1_LINE_SIZE * VICTIM_CACHE_SIZE, VICTIM_CACHE_SIZE, L1_LINE_SIZE, cache->data_size, REPL_TRUE_LRU)
-      }
+  // if no line its a miss
+  // try to access victim cache, if a hit here then adjust accordingly, and
+  // return the right line
+  if(VICTIM_CACHE_SIZE != 0 && strcmp(cache->name, "L1_CACHE")) {
+    victim_cache_lazy_init(cache->data_size);
 
-      for(ii = 0; ii < victim_cache->assoc; ii++) {
-        Cache_Entry* line = &victim_cache->entries[set][ii];
-        Addr l1_line_addr,victim_line_addr;
-        Addr l1_repl_line_addr,victim_repl_line_addr; 
+    for(ii = 0; ii < victim_cache->assoc; ii++) {
+      Cache_Entry* victim_line = &victim_cache->entries[0][ii];
+      // victim cache hit
+      if(victim_line->valid && victim_line->tag == tag) {
+        Addr l1_line_addr, victim_line_addr;
+        Addr l1_repl_line_addr, victim_repl_line_addr;
         Flag valid;
+        uns  l1_way;
 
-        //victim cache hit 
-        if(line->valid && line->tag == tag) {
+        // swap with L1 lru
+        Cache_Entry* l1_line = find_repl_entry(cache, victim_line->proc_id, set,
+                                               &l1_way);
+        Cache_Entry  temp_line = *l1_line;
+        *l1_line               = *victim_line;
+        *victim_line           = temp_line;
 
-          //cache entry that is about to replaced in L1
-          //Cache* cache, uns8 proc_id, Addr addr,
-          //Addr* repl_line_addr, Flag* vali
-          // void* data = get_next_repl_line(cache,line->proc_id, addr, &l1_repl_line_addr, &valid);
-
-          //insert victim cache line into L1 cache
-          cache_insert(cache, line->proc_id, addr, &l1_line_addr, &l1_repl_line_addr);
-
-          //insert in victim cache the entry that was just evicted from l1
-          cache_insert(victim_cache,line->proc_id,l1_repl_line_addr,&, &);
-
-          //get LRU in victim Cache and do something?
-          //return hit line
-          return line->data;
+        // update L1 LRU policy
+        if(l1_line->valid && update_repl) {
+          if(l1_line->pref) {
+            l1_line->pref = FALSE;
+          }
+          cache->num_demand_access++;
+          update_repl_policy(cache, l1_line, set, l1_way, FALSE);
         }
+
+        // update victim LRU policy
+        if(victim_line->valid) {
+          victim_cache->num_demand_access++;
+          update_repl_policy(victim_cache, victim_line, 0, ii, FALSE);
+        }
+
+        return l1_line->data;
       }
-    } 
+    }
   }
 
 
@@ -325,6 +333,7 @@ void* cache_insert_replpos(Cache* cache, uns8 proc_id, Addr addr,
                            Cache_Insert_Repl insert_repl_policy,
                            Flag              isPrefetch) {
   Addr         tag;
+  uns          ii;
   uns          repl_index;
   uns          set = cache_index(cache, addr, &tag, line_addr);
   Cache_Entry* new_line;
@@ -334,6 +343,19 @@ void* cache_insert_replpos(Cache* cache, uns8 proc_id, Addr addr,
     *repl_line_addr = 0;
   } else {
     new_line = find_repl_entry(cache, proc_id, set, &repl_index);
+    // evict line to victim_cache if it is valid, and evict the repl_entry of
+    // the victim cache instead
+    if(new_line->valid && VICTIM_CACHE_SIZE != 0 &&
+       strcmp(cache->name, "L1_CACHE")) {
+      victim_cache_lazy_init(cache->data_size);
+      uns          victim_way;
+      Cache_Entry* victim_line = find_repl_entry(victim_cache, proc_id, 0,
+                                                 &victim_way);
+      Cache_Entry  temp_line   = *new_line;
+      *new_line                = *victim_line;
+      *victim_line             = temp_line;
+    }
+
     /* before insert the data into cache, if the cache has shadow entry */
     /* insert that entry to the shadow cache */
     if((cache->repl_policy == REPL_SHADOW_IDEAL) && new_line->valid)
@@ -341,16 +363,6 @@ void* cache_insert_replpos(Cache* cache, uns8 proc_id, Addr addr,
     if(new_line->valid)  // bug fixed. 4/26/04 if the entry is not valid,
                          // repl_line_addr should be set to 0
       *repl_line_addr = new_line->base;
-
-      //Eviction occurs to this line. Ensure it is inserted in the victim cache is appropriate
-      if(VICTIM_CACHE_SIZE != 0){
-        //If cache is L1 cache try victim cache
-        if(strcmp(cache->name,"L1_CACHE")){
-          Addr new_addr, repl_victim_cache_addr;
-          cache_insert(victim_cache, proc_id, *repl_line_addr, &new_addr, &repl_victim_cache_addr);
-          *repl_line_addr = repl_victim_cache_addr;
-        }
-      }
     else
       *repl_line_addr = 0;
     DEBUG(0,
@@ -499,7 +511,14 @@ void* get_next_repl_line(Cache* cache, uns8 proc_id, Addr addr,
   uns          repl_index;
   uns          set_index = cache_index(cache, addr, &line_tag, &line_addr);
   Cache_Entry* new_line  = find_repl_entry(cache, proc_id, set_index,
-                                          &repl_index);
+                                           &repl_index);
+
+  if(new_line->valid && VICTIM_CACHE_SIZE != 0 &&
+     strcmp(cache->name, "L1_CACHE")) {
+    victim_cache_lazy_init(cache->data_size);
+    return get_next_repl_line(victim_cache, proc_id, addr, repl_line_addr,
+                              valid);
+  }
 
   *repl_line_addr = new_line->base;
   *valid          = new_line->valid;
@@ -1016,6 +1035,19 @@ void* cache_insert_lru(Cache* cache, uns8 proc_id, Addr addr, Addr* line_addr,
     *repl_line_addr = 0;
   } else {
     new_line = find_repl_entry(cache, proc_id, set, &repl_index);
+    // evict line to victim_cache if it is valid, and evict the repl_entry of
+    // the victim cache instead
+    if(new_line->valid && VICTIM_CACHE_SIZE != 0 &&
+       strcmp(cache->name, "L1_CACHE")) {
+      victim_cache_lazy_init(cache->data_size);
+      uns          victim_way;
+      Cache_Entry* victim_line = find_repl_entry(victim_cache, proc_id, 0,
+                                                 &victim_way);
+      Cache_Entry  temp_line   = *new_line;
+      *new_line                = *victim_line;
+      *victim_line             = temp_line;
+    }
+
     /* before insert the data into cache, if the cache has shadow entry */
     /* insert that entry to the shadow cache */
     if((cache->repl_policy == REPL_SHADOW_IDEAL) && new_line->valid)
