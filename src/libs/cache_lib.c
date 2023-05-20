@@ -247,7 +247,7 @@ void* cache_access(Cache* cache, Addr addr, Addr* line_addr, Flag update_repl) {
   // if no line its a miss
   // try to access victim cache, if a hit here then adjust accordingly, and
   // return the right line
-  if(VICTIM_CACHE_SIZE != 0 && strcmp(cache->name, "L1_CACHE")) {
+  if(VICTIM_CACHE_SIZE != 0 && !strcmp(cache->name, "L1_CACHE")) {
     victim_cache_lazy_init(cache->data_size);
 
     for(ii = 0; ii < victim_cache.assoc; ii++) {
@@ -343,7 +343,7 @@ void* cache_insert_replpos(Cache* cache, uns8 proc_id, Addr addr,
     // evict line to victim_cache if it is valid, and evict the repl_entry of
     // the victim cache instead
     if(new_line->valid && VICTIM_CACHE_SIZE != 0 &&
-       strcmp(cache->name, "L1_CACHE")) {
+       !strcmp(cache->name, "L1_CACHE")) {
       victim_cache_lazy_init(cache->data_size);
       uns          victim_way;
       Cache_Entry* victim_line = find_repl_entry(&victim_cache, proc_id, 0,
@@ -511,10 +511,9 @@ void* get_next_repl_line(Cache* cache, uns8 proc_id, Addr addr,
                                            &repl_index);
 
   if(new_line->valid && VICTIM_CACHE_SIZE != 0 &&
-     strcmp(cache->name, "L1_CACHE")) {
+     !strcmp(cache->name, "L1_CACHE")) {
     victim_cache_lazy_init(cache->data_size);
-    return get_next_repl_line(&victim_cache, proc_id, addr, repl_line_addr,
-                              valid);
+    new_line = find_repl_entry(&victim_cache, proc_id, 0, &repl_index);
   }
 
   *repl_line_addr = new_line->base;
@@ -1035,7 +1034,7 @@ void* cache_insert_lru(Cache* cache, uns8 proc_id, Addr addr, Addr* line_addr,
     // evict line to victim_cache if it is valid, and evict the repl_entry of
     // the victim cache instead
     if(new_line->valid && VICTIM_CACHE_SIZE != 0 &&
-       strcmp(cache->name, "L1_CACHE")) {
+       !strcmp(cache->name, "L1_CACHE")) {
       victim_cache_lazy_init(cache->data_size);
       uns          victim_way;
       Cache_Entry* victim_line = find_repl_entry(&victim_cache, proc_id, 0,
