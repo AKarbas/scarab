@@ -261,13 +261,13 @@ void* cache_access(Cache* cache, Addr addr, Addr* line_addr, Flag update_repl) {
           //cache entry that is about to replaced in L1
           //Cache* cache, uns8 proc_id, Addr addr,
           //Addr* repl_line_addr, Flag* vali
-          void* data = get_next_repl_line(cache,line->proc_id, addr, &l1_repl_line_addr, &valid);
+          // void* data = get_next_repl_line(cache,line->proc_id, addr, &l1_repl_line_addr, &valid);
 
           //insert victim cache line into L1 cache
-          cache_insert(cache, line->proc_id, addr, &victim_line_addr, &victim_repl_line_addr);
+          cache_insert(cache, line->proc_id, addr, &l1_line_addr, &l1_repl_line_addr);
 
           //insert in victim cache the entry that was just evicted from l1
-          cache_insert(victim_cache,line->proc_id,l1_repl_line_addr,&victim_line_addr, &victim_repl_line_addr);
+          cache_insert(victim_cache,line->proc_id,l1_repl_line_addr,&, &);
 
           //get LRU in victim Cache and do something?
           //return hit line
@@ -341,6 +341,16 @@ void* cache_insert_replpos(Cache* cache, uns8 proc_id, Addr addr,
     if(new_line->valid)  // bug fixed. 4/26/04 if the entry is not valid,
                          // repl_line_addr should be set to 0
       *repl_line_addr = new_line->base;
+
+      //Eviction occurs to this line. Ensure it is inserted in the victim cache is appropriate
+      if(VICTIM_CACHE_SIZE != 0){
+        //If cache is L1 cache try victim cache
+        if(strcmp(cache->name,"L1_CACHE")){
+          Addr new_addr, repl_victim_cache_addr;
+          cache_insert(victim_cache, proc_id, *repl_line_addr, &new_addr, &repl_victim_cache_addr);
+          *repl_line_addr = repl_victim_cache_addr;
+        }
+      }
     else
       *repl_line_addr = 0;
     DEBUG(0,
