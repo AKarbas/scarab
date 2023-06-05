@@ -58,6 +58,7 @@
 #include "prefetcher/pref_ghb.h"
 #include "prefetcher/pref_markov.h"
 #include "prefetcher/pref_phase.h"
+#include "prefetcher/pref_sms.h"
 #include "statistics.h"
 /**************************************************************************************
  * Usage Notes
