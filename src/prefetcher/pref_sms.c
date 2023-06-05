@@ -57,6 +57,9 @@
 
 Pref_SMS* sms_hwp;
 
+uns64 region_mask = N_BIT_MASK(LOG2_64(PREF_SMS_REGION_SIZE));
+
+
 void pref_sms_init(HWP* hwp) {
   int ii;
 
@@ -88,4 +91,28 @@ void pref_sms_ul0_hit(uns8 proc_id, Addr lineAddr, Addr loadPC,
 void pref_sms_ul0_prefhit(uns8 proc_id, Addr lineAddr, Addr loadPC,
                           uns32 global_hist) {
   pref_sms_ul0_train(proc_id, lineAddr, loadPC, global_hist);
+}
+
+
+bool pref_sms_ft_train(Filter_Table ft, uns8 proc_id, Addr lineAddr,
+                       Addr loadPC, Addr* offset) {
+  Addr region_tag = lineAddr & ~region_mask;
+  Addr offset     = lineAddr & region_mask;
+
+  // Check the accummulation table for Tag - PC with different Offset
+  // if match set pattern
+  // else
+  // check Filter Table for Tag - PC
+  // if no match TriggerAccess!
+  // else
+  // compareOffset
+  // if different
+  // move to AccumulationTable and remove from FilterTable
+  // else
+  // Update LRU
+  // if AccumulationTable Full
+  // Evict LRU to PHT
+  // Call Evict Handler Method
+  // if FilterTable Full
+  // Evict LRU and forget about it
 }
