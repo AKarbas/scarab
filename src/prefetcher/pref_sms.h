@@ -97,6 +97,9 @@ void pref_sms_ul0_prefhit(uns8 proc_id, Addr lineAddr, Addr loadPC,
 void pref_sms_ul0_train(uns8 proc_id, Addr lineAddr, Addr loadPC,
                         uns32 global_hist);
 
+void pref_sms_end_generation(uns8 proc_id, Addr lineAddr, Addr loadPC,
+                        uns32 global_hist);
+
 // returns whether the entry was found with a different offset.
 // if found, sets evicted and prevOffset.
 Flag pref_sms_ft_train(Filter_Table ft, uns8 proc_id, Addr lineAddr,

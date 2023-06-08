@@ -124,7 +124,7 @@ void pref_sms_ul0_train(uns8 proc_id, Addr lineAddr, Addr loadPC,
                                         &pattern, &evictedEntry);
     SETBIT(*pattern, prevOffset);
     SETBIT(*pattern, offset);
-    if(atEvicted) {
+    if(atEvicted) { //This needs to be handled at an evict event no?
       pref_sms_pht_insert(
         sms_hwp->pht, proc_id /* todo: incorrect; do we care? */,
         evictedEntry.offset /* only the offset matters in pht */,
@@ -132,4 +132,27 @@ void pref_sms_ul0_train(uns8 proc_id, Addr lineAddr, Addr loadPC,
     }
   }
   pref_sms_fetch_next_preds(&sms_hwp->prf);
+}
+
+void pref_sms_end_generation(uns8 proc_id, Addr lineAddr, Addr loadPC,
+                        uns32 global_hist){
+  Addr   region_base = lineAddr & ~REGION_MASK;
+  Addr   offset      = lineAddr & REGION_MASK;
+  
+
+  //Check Filter Table if single trigger access
+  Flag ftFound = pref_sms_ft_train(sms_hwp->ft, proc_id, lineAddr, loadPC,
+                                  &ftEvicted, &prevOffset);
+  //If true, and same tag of access this is a single Trigger Access Generation, therfore discard
+  if (ftFound){
+    // Unsue of how pref_sms_ft_train is supposed to work, might be enough to just check 
+  }
+
+  Flag atEvicted = pref_sms_at_insert(sms_hwp->at, proc_id, lineAddr, loadPC,
+                                        &pattern, &evictedEntry);
+
+
+  //Check Accumulation Table to persist to PHT
+
+
 }
