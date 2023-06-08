@@ -54,11 +54,9 @@
 /**************************************************************************************/
 /* Macros */
 #define DEBUG(args...) _DEBUG(DEBUG_PREF_PHASE, ##args)
+#define REGION_MASK (N_BIT_MASK(LOG2_64(PREF_SMS_REGION_SIZE)))
 
 Pref_SMS* sms_hwp;
-
-uns64 region_mask = N_BIT_MASK(LOG2_64(PREF_SMS_REGION_SIZE));
-
 
 void pref_sms_init(HWP* hwp) {
   int ii;
@@ -75,6 +73,9 @@ void pref_sms_init(HWP* hwp) {
                                                     sizeof(Filter_Table_Entry));
   sms_hwp->pht               = (Pattern_History_Table)calloc(
     PREF_SMS_PHT_SIZE, sizeof(Pattern_History_Table_Entry));
+  sms_hwp->prf.preds = (Prediction_Register_File)calloc(
+    PREF_SMS_PRF_SIZE, sizeof(Prediction_Register));
+  sms_hwp->prf.live_preds = 0;
 }
 
 
@@ -93,26 +94,42 @@ void pref_sms_ul0_prefhit(uns8 proc_id, Addr lineAddr, Addr loadPC,
   pref_sms_ul0_train(proc_id, lineAddr, loadPC, global_hist);
 }
 
+void pref_sms_ul0_train(uns8 proc_id, Addr lineAddr, Addr loadPC,
+                        uns32 global_hist) {
+  Addr   region_base = lineAddr & ~REGION_MASK;
+  Addr   offset      = lineAddr & REGION_MASK;
+  uns64* pattern     = NULL;  // used in multiple calls
 
-bool pref_sms_ft_train(Filter_Table ft, uns8 proc_id, Addr lineAddr,
-                       Addr loadPC, Addr* offset) {
-  Addr region_tag = lineAddr & ~region_mask;
-  Addr offset     = lineAddr & region_mask;
+  Flag atFound = pref_sms_at_find(sms_hwp->at, proc_id, lineAddr, loadPC,
+                                  &pattern);
+  if(atFound) {
+    SETBIT(*pattern, offset);
+    pref_sms_fetch_next_preds(&sms_hwp->prf);
+    return;
+  }
 
-  // Check the accummulation table for Tag - PC with different Offset
-  // if match set pattern
-  // else
-  // check Filter Table for Tag - PC
-  // if no match TriggerAccess!
-  // else
-  // compareOffset
-  // if different
-  // move to AccumulationTable and remove from FilterTable
-  // else
-  // Update LRU
-  // if AccumulationTable Full
-  // Evict LRU to PHT
-  // Call Evict Handler Method
-  // if FilterTable Full
-  // Evict LRU and forget about it
+  Addr prevOffset;  // from ft
+  Flag ftFound = pref_sms_ft_train(sms_hwp->ft, proc_id, lineAddr, loadPC,
+                                   &ftEvicted, &prevOffset);
+
+  if(!ftFound) {
+    Flag phtFound = pref_sms_pht_find(sms_hwp->pht, proc_id, lineAddr, loadPC,
+                                      &pattern);
+    if(phtFound) {
+      pref_sms_prf_insert(&sms_hwp->prf, region_base, *pattern);
+    }
+  } else if(ftEvicted) {
+    Accumulation_Table_Entry evictedEntry;
+    Flag atEvicted = pref_sms_at_insert(sms_hwp->at, proc_id, lineAddr, loadPC,
+                                        &pattern, &evictedEntry);
+    SETBIT(*pattern, prevOffset);
+    SETBIT(*pattern, offset);
+    if(atEvicted) {
+      pref_sms_pht_insert(
+        sms_hwp->pht, proc_id /* todo: incorrect; do we care? */,
+        evictedEntry.offset /* only the offset matters in pht */,
+        evictedEntry.pc, evictedEntry.pattern);
+    }
+  }
+  pref_sms_fetch_next_preds(&sms_hwp->prf);
 }

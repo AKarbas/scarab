@@ -1,0 +1,69 @@
+/* Copyright 2023 Esteban Ramos and Mohammadamin Karbasforushan
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+/***************************************************************************************
+ * File         : pref_sms.c
+ * Authors      : Amin Karbas and Esteban Ramos
+ * Date         : 06/07/2023
+ * Description  : Impl of Somogyi et al.'s "Spatial Memory Streaming", ISCA'06
+ ***************************************************************************************/
+
+/* -*- Mode: c -*- */
+
+/* These ".stat" files contain the various statistics that can be taken via
+  STAT_EVENTs. It's not a good idea to reorder these, since many calls are made
+  like STAT_EVENT(ICACHE_MISS + hit) which could update either.  All stats are
+  printed both as 'Interval' and 'Cumulative'.  'Interval' is measured during
+  the current stat interval, 'Cumulative' is over the entire run so far.
+
+   DEF_STAT( Name, Type, Ratio )
+
+   The 'Type' column is used to group statistics together and format the
+  printouts somewhat.  See the 'RATIO' type for a description of the 'Ratio
+  Stat' column. Possible 'Type' values are:
+
+  COUNT -- The count is what's important.  Just print the number of times it
+  occurred.
+
+  PER_CYCLE -- We care about how many times this occured per cycle, so divide by
+  the number of cycles.  (Ex. IPC)  The count is also printed.
+
+  PER_INST -- Same thing, but per instruction.
+
+  DIST -- This is a little bit complicated.  The first DIST type encountered
+  signals the beginning of a distribution.  The next DIST encountered marks the
+  end of the distribution (inclusive).  All of the stats in-between should be of
+  type COUNT.  All of the stats in a distribution are printed as a percentage of
+  the total.
+
+  RATIO -- This stat should be printed as a ratio.  The 'Ratio' argument
+  determines which other stat should be used.  The current stat is divided by
+  that specified in the 'Ratio Stat' column.  This column is ignored for all
+  types but RATIO.
+
+*/
+
+DEF_STAT(DCACHE_PREF_SMS_TRAIN_TOTAL, COUNT, NO_RATIO)
+DEF_STAT(DCACHE_PREF_SMS_AT_HIT, count, DCACHE_PREF_SMS_TRAIN_TOTAL)
+DEF_STAT(DCACHE_PREF_SMS_TRIGGER, COUNT, DCACHE_PREF_SMS_TRAIN_TOTAL)
+DEF_STAT(DCACHE_PREF_SMS_FT_REPEAT, COUNT, DCACHE_PREF_SMS_TRAIN_TOTAL)
+DEF_STAT(DCACHE_PREF_SMS_PHT_HIT, COUNT, DCACHE_PREF_SMS_PHT_TRIGGER)
+DEF_STAT(DCACHE_PREF_SMS_PHT_HIT, COUNT, DCACHE_PREF_SMS_PHT_TRIGGER)
