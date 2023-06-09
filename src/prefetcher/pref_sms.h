@@ -75,7 +75,7 @@ typedef struct Prediction_Register_struct {
 
 typedef struct Prediction_Register_File_struct {
   Prediction_Register* preds;
-  uns                  live_preds = 0;
+  uns                  live_preds;
 } Prediction_Register_File;
 
 typedef struct Pref_SMS_struct {
@@ -98,7 +98,7 @@ void pref_sms_ul0_train(uns8 proc_id, Addr lineAddr, Addr loadPC,
                         uns32 global_hist);
 
 void pref_sms_end_generation(uns8 proc_id, Addr lineAddr, Addr loadPC,
-                        uns32 global_hist);
+                             uns32 global_hist);
 
 // returns whether the entry was found with a different offset.
 // if found, sets evicted and prevOffset.
@@ -129,8 +129,12 @@ void pref_sms_pht_insert(Pattern_History_Table pht, uns8 proc_id, Addr lineAddr,
 void pref_sms_prf_insert(Prediction_Register_File* prf, Addr base,
                          uns64 pattern);
 
+void pref_sms_prf_discard(Prediction_Register_File* prf, uns idx);
+
 // fetches from to-fetch queue; round-robin between live entries
 // todo: fetch one or as many as the memory system takes?
 void pref_sms_fetch_next_preds(Prediction_Register_File* prf);
+
+Flag pref_sms_fetch_region(Addr region_base);
 
 #endif /* __PREF_SMS_H__ */

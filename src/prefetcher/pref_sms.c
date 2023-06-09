@@ -54,13 +54,14 @@
 /**************************************************************************************/
 /* Macros */
 #define DEBUG(args...) _DEBUG(DEBUG_PREF_PHASE, ##args)
-#define REGION_MASK (N_BIT_MASK(LOG2_64(PREF_SMS_REGION_SIZE)))
+#define REGION_BASE_MASK (~N_BIT_MASK(LOG2_64(PREF_SMS_REGION_SIZE)))
+#define LINES_PER_REGION (PREF_SMS_REGION_SIZE / DCACHE_LINE_SIZE)
+#define REGION_OFFSET_MASK \
+  (N_BIT_MASK(LOG2_64(LINES_PER_REGION) << LOG2_64(DCACHE_LINE_SIZE)))
 
 Pref_SMS* sms_hwp;
 
 void pref_sms_init(HWP* hwp) {
-  int ii;
-
   if(!PREF_SMS_ON)
     return;
 
@@ -73,7 +74,7 @@ void pref_sms_init(HWP* hwp) {
                                                     sizeof(Filter_Table_Entry));
   sms_hwp->pht               = (Pattern_History_Table)calloc(
     PREF_SMS_PHT_SIZE, sizeof(Pattern_History_Table_Entry));
-  sms_hwp->prf.preds = (Prediction_Register_File)calloc(
+  sms_hwp->prf.preds = (Prediction_Register_File*)calloc(
     PREF_SMS_PRF_SIZE, sizeof(Prediction_Register));
   sms_hwp->prf.live_preds = 0;
 }
@@ -96,8 +97,8 @@ void pref_sms_ul0_prefhit(uns8 proc_id, Addr lineAddr, Addr loadPC,
 
 void pref_sms_ul0_train(uns8 proc_id, Addr lineAddr, Addr loadPC,
                         uns32 global_hist) {
-  Addr   region_base = lineAddr & ~REGION_MASK;
-  Addr   offset      = lineAddr & REGION_MASK;
+  Addr   region_base = lineAddr & REGION_BASE_MASK;
+  Addr   offset      = lineAddr & REGION_OFFSET_MASK;
   uns64* pattern     = NULL;  // used in multiple calls
 
   Flag atFound = pref_sms_at_find(sms_hwp->at, proc_id, lineAddr, loadPC,
@@ -109,6 +110,7 @@ void pref_sms_ul0_train(uns8 proc_id, Addr lineAddr, Addr loadPC,
   }
 
   Addr prevOffset;  // from ft
+  Flag ftEvicted;   // from ft
   Flag ftFound = pref_sms_ft_train(sms_hwp->ft, proc_id, lineAddr, loadPC,
                                    &ftEvicted, &prevOffset);
 
@@ -124,7 +126,7 @@ void pref_sms_ul0_train(uns8 proc_id, Addr lineAddr, Addr loadPC,
                                         &pattern, &evictedEntry);
     SETBIT(*pattern, prevOffset);
     SETBIT(*pattern, offset);
-    if(atEvicted) { //This needs to be handled at an evict event no?
+    if(atEvicted) {  // Due to LRU, different than evict/invalidation
       pref_sms_pht_insert(
         sms_hwp->pht, proc_id /* todo: incorrect; do we care? */,
         evictedEntry.offset /* only the offset matters in pht */,
@@ -135,24 +137,51 @@ void pref_sms_ul0_train(uns8 proc_id, Addr lineAddr, Addr loadPC,
 }
 
 void pref_sms_end_generation(uns8 proc_id, Addr lineAddr, Addr loadPC,
-                        uns32 global_hist){
-  Addr   region_base = lineAddr & ~REGION_MASK;
-  Addr   offset      = lineAddr & REGION_MASK;
-  
+                             uns32 global_hist) {
+  Addr region_base = lineAddr & REGION_BASE_MASK;
+  Addr offset      = lineAddr & REGION_OFFSET_MASK;
 
-  //Check Filter Table if single trigger access
+
+  // Check Filter Table if single trigger access
   Flag ftFound = pref_sms_ft_train(sms_hwp->ft, proc_id, lineAddr, loadPC,
-                                  &ftEvicted, &prevOffset);
-  //If true, and same tag of access this is a single Trigger Access Generation, therfore discard
-  if (ftFound){
-    // Unsue of how pref_sms_ft_train is supposed to work, might be enough to just check 
+                                   &ftEvicted, &prevOffset);
+  // If true, and same tag of access this is a single Trigger Access Generation,
+  // therfore discard
+  if(ftFound) {
+    // Unsue of how pref_sms_ft_train is supposed to work, might be enough to
+    // just check
   }
 
   Flag atEvicted = pref_sms_at_insert(sms_hwp->at, proc_id, lineAddr, loadPC,
-                                        &pattern, &evictedEntry);
+                                      &pattern, &evictedEntry);
 
 
-  //Check Accumulation Table to persist to PHT
+  // Check Accumulation Table to persist to PHT
+}
 
+// todo: currently fetches until can't anymore. Keep?
+void pref_sms_fetch_next_preds(Prediction_Register_File* prf) {
+  Flag done = FALSE;
+  for(uns ii = 0; !done & ii < prf->live_preds; ++ii) {
+    if(!prf->preds[ii].pattern) {
+      pref_sms_prf_discard(prf, ii);
+      continue;
+    }
+    Addr to_fetch = prf->preds[ii].base | (LOG2_64(prf->preds[ii].pattern));
+    done          = !pref_sms_fetch_region(to_fetch);
+    if(!done) {
+      pref_sms_prf_discard(prf, ii);
+    }
+  }
+}
 
+Flag pref_sms_fetch_region(Addr region_base) {
+  for(uns ii = 0; ii < LINES_PER_REGION; ++ii) {
+    uns8 proc_id = get_proc_id_from_cmp_addr(region_base);
+    Addr line    = region_base + (ii * DCACHE_LINE_SIZE);
+    if(!pref_addto_dl0req_queue(proc_id, line, 0)) {
+      return FALSE;
+    }
+  }
+  return TRUE;
 }
