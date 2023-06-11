@@ -90,12 +90,20 @@ typedef struct Pref_SMS_struct {
 /*************************************************************/
 /* HWP Interface */
 void pref_sms_init(HWP* hwp);
+
 void pref_sms_ul0_miss(Addr lineAddr, Addr loadPC);
 void pref_sms_ul0_hit(Addr lineAddr, Addr loadPC);
 void pref_sms_ul0_prefhit(Addr lineAddr, Addr loadPC);
+
+void pref_sms_ul1_miss(uns8 proc_id, Addr lineAddr, Addr loadPC,
+                       uns32 global_hist);
+void pref_sms_ul1_hit(uns8 proc_id, Addr lineAddr, Addr loadPC,
+                      uns32 global_hist);
+void pref_sms_ul1_prefhit(uns8 proc_id, Addr lineAddr, Addr loadPC,
+                          uns32 global_hist);
 /*************************************************************/
 
-void pref_sms_ul0_train(Addr lineAddr, Addr loadPC);
+void pref_sms_train(Addr lineAddr, Addr loadPC);
 void pref_sms_end_generation(Addr lineAddr, Addr loadPC);
 
 // returns whether the entry was found with a different offset.
