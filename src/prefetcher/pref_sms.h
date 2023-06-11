@@ -101,26 +101,29 @@ void pref_sms_end_generation(uns8 proc_id, Addr lineAddr, Addr loadPC,
                              uns32 global_hist);
 
 // returns whether the entry was found with a different offset.
-// if found, sets evicted and prevOffset.
+// if found, removes it and sets evicted, prevOffset, prevPC.
 Flag pref_sms_ft_train(Filter_Table ft, uns8 proc_id, Addr lineAddr,
-                       Addr loadPC, Flag* evicted, Addr* prevOffset);
+                       Addr loadPC, Flag* evicted, Addr* prevOffset,
+                       Addr* prevPC);
 
-// returns whether the entry was found with a different offset.
-// if found, sets evicted and prevOffset.
+// searches for an entry from the same region and discards it.
+// if found returns true.
 Flag pref_sms_ft_discard(Filter_Table ft, uns8 proc_id, Addr lineAddr,
                          Addr loadPC);
 
-// populates pattern, to be set by caller.
-// also updates lru, if found.
+// populates pattern, to be set by caller. if found updates lru and returns
+// true.
 Flag pref_sms_at_find(Accumulation_Table at, uns8 proc_id, Addr lineAddr,
                       Addr loadPC, uns64** pattern);
 
-// returns whether something got evicted; if so, populates evicted.
-// populates pattern, to be set by caller.
+// returns whether something got evicted; if so, populates evicted and returns
+// true. also populates pattern, to be set by caller.
 Flag pref_sms_at_insert(Accumulation_Table at, uns8 proc_id, Addr lineAddr,
                         Addr loadPC, uns64** pattern,
                         Accumulation_Table_Entry* evicted);
 
+// searches for an entry from the same region and discards it.
+// if found returns true and sets evicted.
 Flag pref_sms_at_discard(Accumulation_Table at, uns8 proc_id, Addr lineAddr,
                          Addr loadPC, Accumulation_Table_Entry* evicted);
 
@@ -138,7 +141,8 @@ void pref_sms_pht_insert(Pattern_History_Table pht, uns8 proc_id, Addr lineAddr,
 void pref_sms_prf_insert(Prediction_Register_File* prf, Addr base,
                          uns64 pattern);
 
-void pref_sms_prf_discard(Prediction_Register_File* prf, uns idx);
+// discards the first offset bit of the pattern of the idx'th prediction
+void pref_sms_prf_discard_first(Prediction_Register_File* prf, uns idx);
 
 // fetches from to-fetch queue; round-robin between live entries
 // todo: fetch one or as many as the memory system takes?

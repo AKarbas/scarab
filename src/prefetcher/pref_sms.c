@@ -55,9 +55,14 @@
 /* Macros */
 #define DEBUG(args...) _DEBUG(DEBUG_PREF_PHASE, ##args)
 #define REGION_BASE_MASK (~N_BIT_MASK(LOG2_64(PREF_SMS_REGION_SIZE)))
+#define REGION_BASE_OF(x) ((x)&REGION_BASE_MASK)
 #define LINES_PER_REGION (PREF_SMS_REGION_SIZE / DCACHE_LINE_SIZE)
 #define REGION_OFFSET_MASK \
   (N_BIT_MASK(LOG2_64(LINES_PER_REGION) << LOG2_64(DCACHE_LINE_SIZE)))
+#define REGION_OFFSET_OF(x) \
+  (((x)&REGION_OFFSET_MASK) >> LOG2_64(DCACHE_LINE_SIZE));
+#define FIRST_OFFSET_ADDR(base, pattern) \
+  ((base) | (LOG2_64(pattern) << LOG2_64(DCACHE_LINE_SIZE)))
 
 Pref_SMS* sms_hwp;
 
@@ -97,8 +102,8 @@ void pref_sms_ul0_prefhit(uns8 proc_id, Addr lineAddr, Addr loadPC,
 
 void pref_sms_ul0_train(uns8 proc_id, Addr lineAddr, Addr loadPC,
                         uns32 global_hist) {
-  Addr   region_base = lineAddr & REGION_BASE_MASK;
-  Addr   offset      = lineAddr & REGION_OFFSET_MASK;
+  Addr   region_base = REGION_BASE_OF(lineAddr);
+  Addr   offset      = REGION_OFFSET_OF(lineAddr);
   uns64* pattern     = NULL;  // used in multiple calls
 
   Flag atFound = pref_sms_at_find(sms_hwp->at, proc_id, lineAddr, loadPC,
@@ -110,9 +115,10 @@ void pref_sms_ul0_train(uns8 proc_id, Addr lineAddr, Addr loadPC,
   }
 
   Addr prevOffset;  // from ft
+  Addr prevPC;      // from ft
   Flag ftEvicted;   // from ft
   Flag ftFound = pref_sms_ft_train(sms_hwp->ft, proc_id, lineAddr, loadPC,
-                                   &ftEvicted, &prevOffset);
+                                   &ftEvicted, &prevOffset, &prevPC);
 
   if(!ftFound) {
     Flag phtFound = pref_sms_pht_find(sms_hwp->pht, proc_id, lineAddr, loadPC,
@@ -122,7 +128,7 @@ void pref_sms_ul0_train(uns8 proc_id, Addr lineAddr, Addr loadPC,
     }
   } else if(ftEvicted) {
     Accumulation_Table_Entry evictedEntry;
-    Flag atEvicted = pref_sms_at_insert(sms_hwp->at, proc_id, lineAddr, loadPC,
+    Flag atEvicted = pref_sms_at_insert(sms_hwp->at, proc_id, lineAddr, prevPC,
                                         &pattern, &evictedEntry);
     SETBIT(*pattern, prevOffset);
     SETBIT(*pattern, offset);
@@ -138,8 +144,8 @@ void pref_sms_ul0_train(uns8 proc_id, Addr lineAddr, Addr loadPC,
 
 void pref_sms_end_generation(uns8 proc_id, Addr lineAddr, Addr loadPC,
                              uns32 global_hist) {
-  Addr region_base = lineAddr & REGION_BASE_MASK;
-  Addr offset      = lineAddr & REGION_OFFSET_MASK;
+  Addr region_base = REGION_BASE_OF(lineAddr);
+  Addr offset      = REGION_OFFSET_OF(lineAddr);
 
 
   Flag ftFound = pref_sms_ft_discard(sms_hwp->ft, proc_id, lineAddr, loadPC);
@@ -157,18 +163,133 @@ void pref_sms_end_generation(uns8 proc_id, Addr lineAddr, Addr loadPC,
   pref_sms_fetch_next_preds(&sms_hwp->prf);
 }
 
+Flag pref_sms_ft_train(Filter_Table ft, uns8 proc_id, Addr lineAddr,
+                       Addr loadPC, Flag* evicted, Addr* prevOffset,
+                       Addr* prevPC) {
+  Addr    region_base = REGION_BASE_OF(lineAddr);
+  Addr    offset      = REGION_OFFSET_OF(lineAddr);
+  Counter oldest      = MAX_CTR;
+  uns     write_idx   = MAX_UNS;
+  for(uns ii = 0; ii < PREF_SMS_FT_SIZE; ++ii) {
+    if(ft[ii].tag == region_base) {
+      if(ft[ii].offset != offset) {
+        *evicted    = TRUE;
+        *prevOffset = ft[ii].offset;
+        *prevPC     = ft[ii].pc;
+        memset((void*)(&ft[ii]), 0, sizeof(Filter_Table_Entry));
+        return TRUE;
+      }
+      ft[ii].last_access_time = sim_time;
+      *evicted                = FALSE;
+      return TRUE;
+    } else if(ft[ii].tag == 0 & oldest != 0) {
+      oldest    = 0;  // use the first empty slot
+      write_idx = ii;
+    } else if(oldest != 0 & ft[ii].last_access_time < oldest) {
+      oldest    = ft[ii].last_access_time;
+      write_idx = ii;
+    }
+  }
+  // reaching here means not found
+  ASSERT(proc_id, oldest != MAX_CTR && write_idx != MAX_UNS);
+  ft[write_idx] = (Filter_Table_Entry){
+    .last_access_time = sim_time,
+    .offset           = offset,
+    .pc               = loadPC,
+    .tag              = region_base,
+  };
+  return FALSE;
+}
+
+Flag pref_sms_ft_discard(Filter_Table ft, uns8 proc_id, Addr lineAddr,
+                         Addr loadPC) {
+  Addr region_base = REGION_BASE_OF(lineAddr);
+  for(uns ii = 0; ii < PREF_SMS_FT_SIZE; ++ii) {
+    if(ft[ii].tag == region_base) {}
+    memset((void*)(&ft[ii]), 0, sizeof(Filter_Table_Entry));
+    return TRUE;
+  }
+  return FALSE;
+}
+
+Flag pref_sms_at_find(Accumulation_Table at, uns8 proc_id, Addr lineAddr,
+                      Addr loadPC, uns64** pattern) {
+  Addr region_base = REGION_BASE_OF(lineAddr);
+  Addr offset      = REGION_OFFSET_OF(lineAddr);
+  for(uns ii = 0; ii < PREF_SMS_AT_SIZE; ++ii) {
+    if(at[ii].tag == region_base) {
+      at[ii].last_access_time = sim_time;
+      pattern                 = &at[ii].pattern;
+      return TRUE;
+    }
+  }
+  return FALSE;
+}
+
+Flag pref_sms_at_insert(Accumulation_Table at, uns8 proc_id, Addr lineAddr,
+                        Addr loadPC, uns64** pattern,
+                        Accumulation_Table_Entry* evicted) {
+  Addr    region_base = REGION_BASE_OF(lineAddr);
+  Addr    offset      = REGION_OFFSET_OF(lineAddr);
+  Counter oldest      = MAX_CTR;
+  uns     write_idx   = MAX_UNS;
+  for(uns ii = 0; ii < PREF_SMS_AT_SIZE; ++ii) {
+    if(at[ii].tag == 0) {
+      pattern = &at[ii].pattern;
+      at[ii]  = (Accumulation_Table_Entry){
+         .last_access_time = sim_time,
+         .offset           = offset,
+         .pattern          = 0,
+         .pc               = loadPC,
+         .tag              = region_base,
+      };
+      return FALSE;
+    }
+    if(at[ii].last_access_time < oldest) {
+      oldest    = at[ii].last_access_time;
+      write_idx = ii;
+    }
+  }
+  ASSERT(proc_id, oldest != MAX_CTR && write_idx != MAX_UNS);
+  *evicted      = at[write_idx];
+  *pattern      = &at[write_idx].pattern;
+  at[write_idx] = (Accumulation_Table_Entry){
+    .last_access_time = sim_time,
+    .offset           = offset,
+    .pattern          = 0,
+    .pc               = loadPC,
+    .tag              = region_base,
+  };
+  return TRUE;
+}
+
+Flag pref_sms_at_discard(Accumulation_Table at, uns8 proc_id, Addr lineAddr,
+                         Addr loadPC, Accumulation_Table_Entry* evicted) {
+  Addr region_base = REGION_BASE_OF(lineAddr);
+  Addr offset      = REGION_OFFSET_OF(lineAddr);
+  for(uns ii = 0; ii < PREF_SMS_AT_SIZE; ++ii) {
+    if(at[ii].tag == 0) {
+      *evicted = at[ii];
+      memset((void*)(&at[ii]), 0, sizeof(Accumulation_Table_Entry));
+      return TRUE;
+    }
+  }
+  return FALSE;
+}
+
 // todo: currently fetches until can't anymore. Keep?
 void pref_sms_fetch_next_preds(Prediction_Register_File* prf) {
   Flag done = FALSE;
   for(uns ii = 0; !done & ii < prf->live_preds; ++ii) {
     if(!prf->preds[ii].pattern) {
-      pref_sms_prf_discard(prf, ii);
       continue;
     }
-    Addr to_fetch = prf->preds[ii].base | (LOG2_64(prf->preds[ii].pattern));
+    Addr to_fetch = FIRST_OFFSET_ADDR(prf->preds[ii].base,
+                                      (prf->preds[ii].pattern));
     done          = !pref_sms_fetch_region(to_fetch);
     if(!done) {
-      pref_sms_prf_discard(prf, ii);
+      // !done -> did not fail; first offset of pattern was fetched.
+      pref_sms_prf_discard_first(prf, ii);
     }
   }
 }
