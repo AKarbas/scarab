@@ -128,11 +128,11 @@ Flag pref_sms_at_discard(Accumulation_Table at, uns8 proc_id, Addr lineAddr,
                          Addr loadPC, Accumulation_Table_Entry* evicted);
 
 
-// populates pattern, to be used by caller.
+// populates pattern, to be used by caller. returns true if found.
 Flag pref_sms_pht_find(Pattern_History_Table pht, uns8 proc_id, Addr lineAddr,
                        Addr loadPC, uns64** pattern);
 
-// inserts new entry to pht; possibly replacing lru
+// inserts new entry to pht, possibly replacing lru.
 void pref_sms_pht_insert(Pattern_History_Table pht, uns8 proc_id, Addr lineAddr,
                          Addr loadPC, uns64 pattern);
 

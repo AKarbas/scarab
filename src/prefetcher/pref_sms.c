@@ -144,10 +144,6 @@ void pref_sms_ul0_train(uns8 proc_id, Addr lineAddr, Addr loadPC,
 
 void pref_sms_end_generation(uns8 proc_id, Addr lineAddr, Addr loadPC,
                              uns32 global_hist) {
-  Addr region_base = REGION_BASE_OF(lineAddr);
-  Addr offset      = REGION_OFFSET_OF(lineAddr);
-
-
   Flag ftFound = pref_sms_ft_discard(sms_hwp->ft, proc_id, lineAddr, loadPC);
   if(!ftFound) {
     Accumulation_Table_Entry evictedEntry;
@@ -215,7 +211,6 @@ Flag pref_sms_ft_discard(Filter_Table ft, uns8 proc_id, Addr lineAddr,
 Flag pref_sms_at_find(Accumulation_Table at, uns8 proc_id, Addr lineAddr,
                       Addr loadPC, uns64** pattern) {
   Addr region_base = REGION_BASE_OF(lineAddr);
-  Addr offset      = REGION_OFFSET_OF(lineAddr);
   for(uns ii = 0; ii < PREF_SMS_AT_SIZE; ++ii) {
     if(at[ii].tag == region_base) {
       at[ii].last_access_time = sim_time;
@@ -266,15 +261,57 @@ Flag pref_sms_at_insert(Accumulation_Table at, uns8 proc_id, Addr lineAddr,
 Flag pref_sms_at_discard(Accumulation_Table at, uns8 proc_id, Addr lineAddr,
                          Addr loadPC, Accumulation_Table_Entry* evicted) {
   Addr region_base = REGION_BASE_OF(lineAddr);
-  Addr offset      = REGION_OFFSET_OF(lineAddr);
   for(uns ii = 0; ii < PREF_SMS_AT_SIZE; ++ii) {
-    if(at[ii].tag == 0) {
+    if(at[ii].tag == region_base) {
       *evicted = at[ii];
       memset((void*)(&at[ii]), 0, sizeof(Accumulation_Table_Entry));
       return TRUE;
     }
   }
   return FALSE;
+}
+
+Flag pref_sms_pht_find(Pattern_History_Table pht, uns8 proc_id, Addr lineAddr,
+                       Addr loadPC, uns64** pattern) {
+  Addr offset = REGION_OFFSET_OF(lineAddr);
+  for(uns ii = 0; ii < PREF_SMS_PHT_SIZE; ++ii) {
+    if(pht[ii].pc == loadPC & pht[ii].offset == offset) {
+      pht[ii].last_access_time = sim_time;
+      *pattern                 = &pht[ii].pattern;
+      return TRUE;
+    }
+  }
+}
+
+void pref_sms_pht_insert(Pattern_History_Table pht, uns8 proc_id, Addr lineAddr,
+                         Addr loadPC, uns64 pattern) {
+  Addr    region_base = REGION_BASE_OF(lineAddr);
+  Addr    offset      = REGION_OFFSET_OF(lineAddr);
+  Counter oldest      = MAX_CTR;
+  uns     write_idx   = MAX_UNS;
+  for(uns ii = 0; ii < PREF_SMS_AT_SIZE; ++ii) {
+    if(pht[ii].pattern == 0) {
+      pattern = &pht[ii].pattern;
+      pht[ii] = (Pattern_History_Table_Entry){
+        .last_access_time = sim_time,
+        .offset           = offset,
+        .pattern          = pattern,
+        .pc               = loadPC,
+      };
+      return;
+    }
+    if(pht[ii].last_access_time < oldest) {
+      oldest    = pht[ii].last_access_time;
+      write_idx = ii;
+    }
+  }
+  ASSERT(proc_id, oldest != MAX_CTR && write_idx != MAX_UNS);
+  pht[write_idx] = (Pattern_History_Table_Entry){
+    .last_access_time = sim_time,
+    .offset           = offset,
+    .pattern          = pattern,
+    .pc               = loadPC,
+  };
 }
 
 // todo: currently fetches until can't anymore. Keep?
