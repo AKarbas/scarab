@@ -79,7 +79,7 @@ void pref_sms_init(HWP* hwp) {
                                                     sizeof(Filter_Table_Entry));
   sms_hwp->pht               = (Pattern_History_Table)calloc(
     PREF_SMS_PHT_SIZE, sizeof(Pattern_History_Table_Entry));
-  sms_hwp->prf.preds = (Prediction_Register_File*)calloc(
+  sms_hwp->prf.preds = (Prediction_Register*)calloc(
     PREF_SMS_PRF_SIZE, sizeof(Prediction_Register));
   sms_hwp->prf.live_preds = 0;
 }
@@ -178,10 +178,10 @@ Flag pref_sms_ft_train(Filter_Table ft, uns8 proc_id, Addr lineAddr,
       ft[ii].last_access_time = sim_time;
       *evicted                = FALSE;
       return TRUE;
-    } else if(ft[ii].tag == 0 & oldest != 0) {
+    } else if((ft[ii].tag == 0) & (oldest != 0)) {
       oldest    = 0;  // use the first empty slot
       write_idx = ii;
-    } else if(oldest != 0 & ft[ii].last_access_time < oldest) {
+    } else if((oldest != 0) & (ft[ii].last_access_time < oldest)) {
       oldest    = ft[ii].last_access_time;
       write_idx = ii;
     }
@@ -214,7 +214,7 @@ Flag pref_sms_at_find(Accumulation_Table at, uns8 proc_id, Addr lineAddr,
   for(uns ii = 0; ii < PREF_SMS_AT_SIZE; ++ii) {
     if(at[ii].tag == region_base) {
       at[ii].last_access_time = sim_time;
-      pattern                 = &at[ii].pattern;
+      *pattern                = &at[ii].pattern;
       return TRUE;
     }
   }
@@ -230,13 +230,13 @@ Flag pref_sms_at_insert(Accumulation_Table at, uns8 proc_id, Addr lineAddr,
   uns     write_idx   = MAX_UNS;
   for(uns ii = 0; ii < PREF_SMS_AT_SIZE; ++ii) {
     if(at[ii].tag == 0) {
-      pattern = &at[ii].pattern;
-      at[ii]  = (Accumulation_Table_Entry){
-         .last_access_time = sim_time,
-         .offset           = offset,
-         .pattern          = 0,
-         .pc               = loadPC,
-         .tag              = region_base,
+      *pattern = &at[ii].pattern;
+      at[ii]   = (Accumulation_Table_Entry){
+          .last_access_time = sim_time,
+          .offset           = offset,
+          .pattern          = 0,
+          .pc               = loadPC,
+          .tag              = region_base,
       };
       return FALSE;
     }
@@ -275,12 +275,13 @@ Flag pref_sms_pht_find(Pattern_History_Table pht, uns8 proc_id, Addr lineAddr,
                        Addr loadPC, uns64** pattern) {
   Addr offset = REGION_OFFSET_OF(lineAddr);
   for(uns ii = 0; ii < PREF_SMS_PHT_SIZE; ++ii) {
-    if(pht[ii].pc == loadPC & pht[ii].offset == offset) {
+    if((pht[ii].pc == loadPC) & (pht[ii].offset == offset)) {
       pht[ii].last_access_time = sim_time;
       *pattern                 = &pht[ii].pattern;
       return TRUE;
     }
   }
+  return FALSE;
 }
 
 void pref_sms_pht_insert(Pattern_History_Table pht, uns8 proc_id, Addr lineAddr,
@@ -291,7 +292,6 @@ void pref_sms_pht_insert(Pattern_History_Table pht, uns8 proc_id, Addr lineAddr,
   uns     write_idx   = MAX_UNS;
   for(uns ii = 0; ii < PREF_SMS_AT_SIZE; ++ii) {
     if(pht[ii].pattern == 0) {
-      pattern = &pht[ii].pattern;
       pht[ii] = (Pattern_History_Table_Entry){
         .last_access_time = sim_time,
         .offset           = offset,
@@ -365,7 +365,7 @@ void pref_sms_prf_discard_first(Prediction_Register_File* prf, uns idx) {
 void pref_sms_fetch_next_preds(Prediction_Register_File* prf) {
   Flag done = FALSE;
   uns  ii   = 0;
-  while(!done & prf->live_preds > 0) {
+  while((!done) & (prf->live_preds > 0)) {
     if(!prf->preds[ii].pattern) {
       continue;
     }

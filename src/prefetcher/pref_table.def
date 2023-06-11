@@ -82,7 +82,7 @@ HWP pref_table [] = {
 	 	  NULL,  		NULL,         		NULL,
           NULL,        		NULL,   	   	NULL,   		
 	     	  pref_markov_ul1_miss, NULL,     		pref_markov_ul1_prefhit  },
-	 { "sms",  PREF_SMS_ON,  		NULL,  			pref_sms_init,    		NULL,
+	 { "sms",  PREF_TO_DL0,  		NULL,  			pref_sms_init,    		NULL,
                   NULL,
 	          pref_sms_ul0_miss,  pref_sms_ul0_hit,     pref_sms_ul0_prefhit,
 	          NULL,        		NULL,   	   	NULL,   		
