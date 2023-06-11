@@ -105,6 +105,11 @@ void pref_sms_end_generation(uns8 proc_id, Addr lineAddr, Addr loadPC,
 Flag pref_sms_ft_train(Filter_Table ft, uns8 proc_id, Addr lineAddr,
                        Addr loadPC, Flag* evicted, Addr* prevOffset);
 
+// returns whether the entry was found with a different offset.
+// if found, sets evicted and prevOffset.
+Flag pref_sms_ft_discard(Filter_Table ft, uns8 proc_id, Addr lineAddr,
+                         Addr loadPC);
+
 // populates pattern, to be set by caller.
 // also updates lru, if found.
 Flag pref_sms_at_find(Accumulation_Table at, uns8 proc_id, Addr lineAddr,
@@ -115,6 +120,10 @@ Flag pref_sms_at_find(Accumulation_Table at, uns8 proc_id, Addr lineAddr,
 Flag pref_sms_at_insert(Accumulation_Table at, uns8 proc_id, Addr lineAddr,
                         Addr loadPC, uns64** pattern,
                         Accumulation_Table_Entry* evicted);
+
+Flag pref_sms_at_discard(Accumulation_Table at, uns8 proc_id, Addr lineAddr,
+                         Addr loadPC, Accumulation_Table_Entry* evicted);
+
 
 // populates pattern, to be used by caller.
 Flag pref_sms_pht_find(Pattern_History_Table pht, uns8 proc_id, Addr lineAddr,

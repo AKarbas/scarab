@@ -126,7 +126,7 @@ void pref_sms_ul0_train(uns8 proc_id, Addr lineAddr, Addr loadPC,
                                         &pattern, &evictedEntry);
     SETBIT(*pattern, prevOffset);
     SETBIT(*pattern, offset);
-    if(atEvicted) {  // Due to LRU, different than evict/invalidation
+    if(atEvicted) {  // LRU
       pref_sms_pht_insert(
         sms_hwp->pht, proc_id /* todo: incorrect; do we care? */,
         evictedEntry.offset /* only the offset matters in pht */,
@@ -142,21 +142,19 @@ void pref_sms_end_generation(uns8 proc_id, Addr lineAddr, Addr loadPC,
   Addr offset      = lineAddr & REGION_OFFSET_MASK;
 
 
-  // Check Filter Table if single trigger access
-  Flag ftFound = pref_sms_ft_train(sms_hwp->ft, proc_id, lineAddr, loadPC,
-                                   &ftEvicted, &prevOffset);
-  // If true, and same tag of access this is a single Trigger Access Generation,
-  // therfore discard
-  if(ftFound) {
-    // Unsue of how pref_sms_ft_train is supposed to work, might be enough to
-    // just check
+  Flag ftFound = pref_sms_ft_discard(sms_hwp->ft, proc_id, lineAddr, loadPC);
+  if(!ftFound) {
+    Accumulation_Table_Entry evictedEntry;
+    Flag atFound = pref_sms_at_discard(sms_hwp->at, proc_id, lineAddr, loadPC,
+                                       &evictedEntry);
+    if(atFound) {  // eviction or invalidation
+      pref_sms_pht_insert(
+        sms_hwp->pht, proc_id /* todo: incorrect; do we care? */,
+        evictedEntry.offset /* only the offset matters in pht */,
+        evictedEntry.pc, evictedEntry.pattern);
+    }
   }
-
-  Flag atEvicted = pref_sms_at_insert(sms_hwp->at, proc_id, lineAddr, loadPC,
-                                      &pattern, &evictedEntry);
-
-
-  // Check Accumulation Table to persist to PHT
+  pref_sms_fetch_next_preds(&sms_hwp->prf);
 }
 
 // todo: currently fetches until can't anymore. Keep?
