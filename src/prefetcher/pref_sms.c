@@ -314,10 +314,58 @@ void pref_sms_pht_insert(Pattern_History_Table pht, uns8 proc_id, Addr lineAddr,
   };
 }
 
+void pref_sms_prf_insert(Prediction_Register_File* prf, Addr base,
+                         uns64 pattern) {
+  if(prf->live_preds < PREF_SMS_PRF_SIZE) {
+    prf->preds[prf->live_preds] = (Prediction_Register){
+      .base        = base,
+      .insert_time = sim_time,
+      .pattern     = pattern,
+    };
+    ++prf->live_preds;
+    return;
+  }
+
+  // full; find least recently insert
+  Counter oldest    = MAX_CTR;
+  uns     write_idx = MAX_UNS;
+  for(uns ii = 0; ii < PREF_SMS_PRF_SIZE; ++ii) {
+    if(prf->preds->insert_time < oldest) {
+      oldest    = prf->preds->insert_time;
+      write_idx = ii;
+    }
+  }
+  ASSERT(get_proc_id_from_cmp_addr(base),
+         oldest != MAX_CTR && write_idx != MAX_UNS);
+  prf->preds[write_idx] = (Prediction_Register){
+    .base        = base,
+    .insert_time = sim_time,
+    .pattern     = pattern,
+  };
+}
+
+void pref_sms_prf_discard_first(Prediction_Register_File* prf, uns idx) {
+  ASSERT(get_proc_id_from_cmp_addr(prf->preds[idx].base),
+         prf->preds[idx].pattern);
+  uns bit_idx = LOG2_64(prf->preds[idx].pattern);
+  ASSERT(get_proc_id_from_cmp_addr(prf->preds[idx].base),
+         TESTBIT(prf->preds[idx].pattern, bit_idx));
+  CLRBIT(prf->preds[idx].pattern, bit_idx);
+
+  if(prf->preds[idx].pattern == 0) {
+    // all fetched, discard entry.
+    ASSERT(get_proc_id_from_cmp_addr(prf->preds[idx].base),
+           prf->live_preds > 0);
+    --prf->live_preds;
+    prf->preds[idx] = prf->preds[prf->live_preds];
+  }
+}
+
 // todo: currently fetches until can't anymore. Keep?
 void pref_sms_fetch_next_preds(Prediction_Register_File* prf) {
   Flag done = FALSE;
-  for(uns ii = 0; !done & ii < prf->live_preds; ++ii) {
+  uns  ii   = 0;
+  while(!done & prf->live_preds > 0) {
     if(!prf->preds[ii].pattern) {
       continue;
     }
@@ -328,6 +376,7 @@ void pref_sms_fetch_next_preds(Prediction_Register_File* prf) {
       // !done -> did not fail; first offset of pattern was fetched.
       pref_sms_prf_discard_first(prf, ii);
     }
+    ii = ii == prf->live_preds - 1 ? 0 : ii + 1;
   }
 }
 

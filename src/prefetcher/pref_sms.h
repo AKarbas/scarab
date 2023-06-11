@@ -69,8 +69,9 @@ typedef struct Pattern_History_Table_Entry_struct {
 typedef Pattern_History_Table_Entry* Pattern_History_Table;
 
 typedef struct Prediction_Register_struct {
-  Addr  base;
-  uns64 pattern;
+  Counter insert_time;
+  Addr    base;
+  uns64   pattern;
 } Prediction_Register;
 
 typedef struct Prediction_Register_File_struct {
@@ -136,12 +137,12 @@ Flag pref_sms_pht_find(Pattern_History_Table pht, uns8 proc_id, Addr lineAddr,
 void pref_sms_pht_insert(Pattern_History_Table pht, uns8 proc_id, Addr lineAddr,
                          Addr loadPC, uns64 pattern);
 
-// adds a prediction to the to-fetch queue. if full, replaces an entry
-// todo: which entry? counter? lru? rand?
+// adds a prediction to the to-fetch queue. if full, replaces oldest insert
 void pref_sms_prf_insert(Prediction_Register_File* prf, Addr base,
                          uns64 pattern);
 
-// discards the first offset bit of the pattern of the idx'th prediction
+// discards the first offset bit of the pattern of the idx'th prediction.
+// if pattern becomes empty, discards the entry.
 void pref_sms_prf_discard_first(Prediction_Register_File* prf, uns idx);
 
 // fetches from to-fetch queue; round-robin between live entries
