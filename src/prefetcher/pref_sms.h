@@ -87,55 +87,49 @@ typedef struct Pref_SMS_struct {
   Prediction_Register_File prf;
 } Pref_SMS;
 
+/*************************************************************/
+/* HWP Interface */
 void pref_sms_init(HWP* hwp);
-void pref_sms_ul0_miss(uns8 proc_id, Addr lineAddr, Addr loadPC,
-                       uns32 global_hist);
-void pref_sms_ul0_hit(uns8 proc_id, Addr lineAddr, Addr loadPC,
-                      uns32 global_hist);
-void pref_sms_ul0_prefhit(uns8 proc_id, Addr lineAddr, Addr loadPC,
-                          uns32 global_hist);
+void pref_sms_ul0_miss(Addr lineAddr, Addr loadPC);
+void pref_sms_ul0_hit(Addr lineAddr, Addr loadPC);
+void pref_sms_ul0_prefhit(Addr lineAddr, Addr loadPC);
+/*************************************************************/
 
-void pref_sms_ul0_train(uns8 proc_id, Addr lineAddr, Addr loadPC,
-                        uns32 global_hist);
-
-void pref_sms_end_generation(uns8 proc_id, Addr lineAddr, Addr loadPC,
-                             uns32 global_hist);
+void pref_sms_ul0_train(Addr lineAddr, Addr loadPC);
+void pref_sms_end_generation(Addr lineAddr, Addr loadPC);
 
 // returns whether the entry was found with a different offset.
 // if found, removes it and sets evicted, prevOffset, prevPC.
-Flag pref_sms_ft_train(Filter_Table ft, uns8 proc_id, Addr lineAddr,
-                       Addr loadPC, Flag* evicted, Addr* prevOffset,
-                       Addr* prevPC);
+Flag pref_sms_ft_train(Filter_Table ft, Addr lineAddr, Addr loadPC,
+                       Flag* evicted, Addr* prevOffset, Addr* prevPC);
 
 // searches for an entry from the same region and discards it.
 // if found returns true.
-Flag pref_sms_ft_discard(Filter_Table ft, uns8 proc_id, Addr lineAddr,
-                         Addr loadPC);
+Flag pref_sms_ft_discard(Filter_Table ft, Addr lineAddr, Addr loadPC);
 
 // populates pattern, to be set by caller. if found updates lru and returns
 // true.
-Flag pref_sms_at_find(Accumulation_Table at, uns8 proc_id, Addr lineAddr,
-                      Addr loadPC, uns64** pattern);
+Flag pref_sms_at_find(Accumulation_Table at, Addr lineAddr, Addr loadPC,
+                      uns64** pattern);
 
 // returns whether something got evicted; if so, populates evicted and returns
 // true. also populates pattern, to be set by caller.
-Flag pref_sms_at_insert(Accumulation_Table at, uns8 proc_id, Addr lineAddr,
-                        Addr loadPC, uns64** pattern,
-                        Accumulation_Table_Entry* evicted);
+Flag pref_sms_at_insert(Accumulation_Table at, Addr lineAddr, Addr loadPC,
+                        uns64** pattern, Accumulation_Table_Entry* evicted);
 
 // searches for an entry from the same region and discards it.
 // if found returns true and sets evicted.
-Flag pref_sms_at_discard(Accumulation_Table at, uns8 proc_id, Addr lineAddr,
-                         Addr loadPC, Accumulation_Table_Entry* evicted);
+Flag pref_sms_at_discard(Accumulation_Table at, Addr lineAddr, Addr loadPC,
+                         Accumulation_Table_Entry* evicted);
 
 
 // populates pattern, to be used by caller. returns true if found.
-Flag pref_sms_pht_find(Pattern_History_Table pht, uns8 proc_id, Addr lineAddr,
-                       Addr loadPC, uns64** pattern);
+Flag pref_sms_pht_find(Pattern_History_Table pht, Addr lineAddr, Addr loadPC,
+                       uns64** pattern);
 
 // inserts new entry to pht, possibly replacing lru.
-void pref_sms_pht_insert(Pattern_History_Table pht, uns8 proc_id, Addr lineAddr,
-                         Addr loadPC, uns64 pattern);
+void pref_sms_pht_insert(Pattern_History_Table pht, Addr lineAddr, Addr loadPC,
+                         uns64 pattern);
 
 // adds a prediction to the to-fetch queue. if full, replaces oldest insert
 void pref_sms_prf_insert(Prediction_Register_File* prf, Addr base,

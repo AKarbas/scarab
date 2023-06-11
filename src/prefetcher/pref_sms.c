@@ -85,29 +85,24 @@ void pref_sms_init(HWP* hwp) {
 }
 
 
-void pref_sms_ul0_miss(uns8 proc_id, Addr lineAddr, Addr loadPC,
-                       uns32 global_hist) {
-  pref_sms_ul0_train(proc_id, lineAddr, loadPC, global_hist);
+void pref_sms_ul0_miss(Addr lineAddr, Addr loadPC) {
+  pref_sms_ul0_train(lineAddr, loadPC);
 }
 
-void pref_sms_ul0_hit(uns8 proc_id, Addr lineAddr, Addr loadPC,
-                      uns32 global_hist) {
-  pref_sms_ul0_train(proc_id, lineAddr, loadPC, global_hist);
+void pref_sms_ul0_hit(Addr lineAddr, Addr loadPC) {
+  pref_sms_ul0_train(lineAddr, loadPC);
 }
 
-void pref_sms_ul0_prefhit(uns8 proc_id, Addr lineAddr, Addr loadPC,
-                          uns32 global_hist) {
-  pref_sms_ul0_train(proc_id, lineAddr, loadPC, global_hist);
+void pref_sms_ul0_prefhit(Addr lineAddr, Addr loadPC) {
+  pref_sms_ul0_train(lineAddr, loadPC);
 }
 
-void pref_sms_ul0_train(uns8 proc_id, Addr lineAddr, Addr loadPC,
-                        uns32 global_hist) {
+void pref_sms_ul0_train(Addr lineAddr, Addr loadPC) {
   Addr   region_base = REGION_BASE_OF(lineAddr);
   Addr   offset      = REGION_OFFSET_OF(lineAddr);
   uns64* pattern     = NULL;  // used in multiple calls
 
-  Flag atFound = pref_sms_at_find(sms_hwp->at, proc_id, lineAddr, loadPC,
-                                  &pattern);
+  Flag atFound = pref_sms_at_find(sms_hwp->at, lineAddr, loadPC, &pattern);
   if(atFound) {
     SETBIT(*pattern, offset);
     pref_sms_fetch_next_preds(&sms_hwp->prf);
@@ -117,51 +112,46 @@ void pref_sms_ul0_train(uns8 proc_id, Addr lineAddr, Addr loadPC,
   Addr prevOffset;  // from ft
   Addr prevPC;      // from ft
   Flag ftEvicted;   // from ft
-  Flag ftFound = pref_sms_ft_train(sms_hwp->ft, proc_id, lineAddr, loadPC,
-                                   &ftEvicted, &prevOffset, &prevPC);
+  Flag ftFound = pref_sms_ft_train(sms_hwp->ft, lineAddr, loadPC, &ftEvicted,
+                                   &prevOffset, &prevPC);
 
   if(!ftFound) {
-    Flag phtFound = pref_sms_pht_find(sms_hwp->pht, proc_id, lineAddr, loadPC,
-                                      &pattern);
+    Flag phtFound = pref_sms_pht_find(sms_hwp->pht, lineAddr, loadPC, &pattern);
     if(phtFound) {
       pref_sms_prf_insert(&sms_hwp->prf, region_base, *pattern);
     }
   } else if(ftEvicted) {
     Accumulation_Table_Entry evictedEntry;
-    Flag atEvicted = pref_sms_at_insert(sms_hwp->at, proc_id, lineAddr, prevPC,
-                                        &pattern, &evictedEntry);
+    Flag atEvicted = pref_sms_at_insert(sms_hwp->at, lineAddr, prevPC, &pattern,
+                                        &evictedEntry);
     SETBIT(*pattern, prevOffset);
     SETBIT(*pattern, offset);
     if(atEvicted) {  // LRU
       pref_sms_pht_insert(
-        sms_hwp->pht, proc_id /* todo: incorrect; do we care? */,
-        evictedEntry.offset /* only the offset matters in pht */,
+        sms_hwp->pht, evictedEntry.offset /* only the offset matters in pht */,
         evictedEntry.pc, evictedEntry.pattern);
     }
   }
   pref_sms_fetch_next_preds(&sms_hwp->prf);
 }
 
-void pref_sms_end_generation(uns8 proc_id, Addr lineAddr, Addr loadPC,
-                             uns32 global_hist) {
-  Flag ftFound = pref_sms_ft_discard(sms_hwp->ft, proc_id, lineAddr, loadPC);
+void pref_sms_end_generation(Addr lineAddr, Addr loadPC) {
+  Flag ftFound = pref_sms_ft_discard(sms_hwp->ft, lineAddr, loadPC);
   if(!ftFound) {
     Accumulation_Table_Entry evictedEntry;
-    Flag atFound = pref_sms_at_discard(sms_hwp->at, proc_id, lineAddr, loadPC,
+    Flag atFound = pref_sms_at_discard(sms_hwp->at, lineAddr, loadPC,
                                        &evictedEntry);
     if(atFound) {  // eviction or invalidation
       pref_sms_pht_insert(
-        sms_hwp->pht, proc_id /* todo: incorrect; do we care? */,
-        evictedEntry.offset /* only the offset matters in pht */,
+        sms_hwp->pht, evictedEntry.offset /* only the offset matters in pht */,
         evictedEntry.pc, evictedEntry.pattern);
     }
   }
   pref_sms_fetch_next_preds(&sms_hwp->prf);
 }
 
-Flag pref_sms_ft_train(Filter_Table ft, uns8 proc_id, Addr lineAddr,
-                       Addr loadPC, Flag* evicted, Addr* prevOffset,
-                       Addr* prevPC) {
+Flag pref_sms_ft_train(Filter_Table ft, Addr lineAddr, Addr loadPC,
+                       Flag* evicted, Addr* prevOffset, Addr* prevPC) {
   Addr    region_base = REGION_BASE_OF(lineAddr);
   Addr    offset      = REGION_OFFSET_OF(lineAddr);
   Counter oldest      = MAX_CTR;
@@ -187,7 +177,8 @@ Flag pref_sms_ft_train(Filter_Table ft, uns8 proc_id, Addr lineAddr,
     }
   }
   // reaching here means not found
-  ASSERT(proc_id, oldest != MAX_CTR && write_idx != MAX_UNS);
+  ASSERT(get_proc_id_from_cmp_addr(region_base),
+         oldest != MAX_CTR && write_idx != MAX_UNS);
   ft[write_idx] = (Filter_Table_Entry){
     .last_access_time = sim_time,
     .offset           = offset,
@@ -197,8 +188,7 @@ Flag pref_sms_ft_train(Filter_Table ft, uns8 proc_id, Addr lineAddr,
   return FALSE;
 }
 
-Flag pref_sms_ft_discard(Filter_Table ft, uns8 proc_id, Addr lineAddr,
-                         Addr loadPC) {
+Flag pref_sms_ft_discard(Filter_Table ft, Addr lineAddr, Addr loadPC) {
   Addr region_base = REGION_BASE_OF(lineAddr);
   for(uns ii = 0; ii < PREF_SMS_FT_SIZE; ++ii) {
     if(ft[ii].tag == region_base) {}
@@ -208,8 +198,8 @@ Flag pref_sms_ft_discard(Filter_Table ft, uns8 proc_id, Addr lineAddr,
   return FALSE;
 }
 
-Flag pref_sms_at_find(Accumulation_Table at, uns8 proc_id, Addr lineAddr,
-                      Addr loadPC, uns64** pattern) {
+Flag pref_sms_at_find(Accumulation_Table at, Addr lineAddr, Addr loadPC,
+                      uns64** pattern) {
   Addr region_base = REGION_BASE_OF(lineAddr);
   for(uns ii = 0; ii < PREF_SMS_AT_SIZE; ++ii) {
     if(at[ii].tag == region_base) {
@@ -221,9 +211,8 @@ Flag pref_sms_at_find(Accumulation_Table at, uns8 proc_id, Addr lineAddr,
   return FALSE;
 }
 
-Flag pref_sms_at_insert(Accumulation_Table at, uns8 proc_id, Addr lineAddr,
-                        Addr loadPC, uns64** pattern,
-                        Accumulation_Table_Entry* evicted) {
+Flag pref_sms_at_insert(Accumulation_Table at, Addr lineAddr, Addr loadPC,
+                        uns64** pattern, Accumulation_Table_Entry* evicted) {
   Addr    region_base = REGION_BASE_OF(lineAddr);
   Addr    offset      = REGION_OFFSET_OF(lineAddr);
   Counter oldest      = MAX_CTR;
@@ -245,7 +234,8 @@ Flag pref_sms_at_insert(Accumulation_Table at, uns8 proc_id, Addr lineAddr,
       write_idx = ii;
     }
   }
-  ASSERT(proc_id, oldest != MAX_CTR && write_idx != MAX_UNS);
+  ASSERT(get_proc_id_from_cmp_addr(region_base),
+         oldest != MAX_CTR && write_idx != MAX_UNS);
   *evicted      = at[write_idx];
   *pattern      = &at[write_idx].pattern;
   at[write_idx] = (Accumulation_Table_Entry){
@@ -258,8 +248,8 @@ Flag pref_sms_at_insert(Accumulation_Table at, uns8 proc_id, Addr lineAddr,
   return TRUE;
 }
 
-Flag pref_sms_at_discard(Accumulation_Table at, uns8 proc_id, Addr lineAddr,
-                         Addr loadPC, Accumulation_Table_Entry* evicted) {
+Flag pref_sms_at_discard(Accumulation_Table at, Addr lineAddr, Addr loadPC,
+                         Accumulation_Table_Entry* evicted) {
   Addr region_base = REGION_BASE_OF(lineAddr);
   for(uns ii = 0; ii < PREF_SMS_AT_SIZE; ++ii) {
     if(at[ii].tag == region_base) {
@@ -271,8 +261,8 @@ Flag pref_sms_at_discard(Accumulation_Table at, uns8 proc_id, Addr lineAddr,
   return FALSE;
 }
 
-Flag pref_sms_pht_find(Pattern_History_Table pht, uns8 proc_id, Addr lineAddr,
-                       Addr loadPC, uns64** pattern) {
+Flag pref_sms_pht_find(Pattern_History_Table pht, Addr lineAddr, Addr loadPC,
+                       uns64** pattern) {
   Addr offset = REGION_OFFSET_OF(lineAddr);
   for(uns ii = 0; ii < PREF_SMS_PHT_SIZE; ++ii) {
     if((pht[ii].pc == loadPC) & (pht[ii].offset == offset)) {
@@ -284,8 +274,8 @@ Flag pref_sms_pht_find(Pattern_History_Table pht, uns8 proc_id, Addr lineAddr,
   return FALSE;
 }
 
-void pref_sms_pht_insert(Pattern_History_Table pht, uns8 proc_id, Addr lineAddr,
-                         Addr loadPC, uns64 pattern) {
+void pref_sms_pht_insert(Pattern_History_Table pht, Addr lineAddr, Addr loadPC,
+                         uns64 pattern) {
   Addr    region_base = REGION_BASE_OF(lineAddr);
   Addr    offset      = REGION_OFFSET_OF(lineAddr);
   Counter oldest      = MAX_CTR;
@@ -305,7 +295,8 @@ void pref_sms_pht_insert(Pattern_History_Table pht, uns8 proc_id, Addr lineAddr,
       write_idx = ii;
     }
   }
-  ASSERT(proc_id, oldest != MAX_CTR && write_idx != MAX_UNS);
+  ASSERT(get_proc_id_from_cmp_addr(region_base),
+         oldest != MAX_CTR && write_idx != MAX_UNS);
   pht[write_idx] = (Pattern_History_Table_Entry){
     .last_access_time = sim_time,
     .offset           = offset,
