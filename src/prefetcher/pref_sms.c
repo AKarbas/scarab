@@ -58,7 +58,7 @@
 #define REGION_BASE_OF(x) ((x)&REGION_BASE_MASK)
 #define LINES_PER_REGION (PREF_SMS_REGION_SIZE / DCACHE_LINE_SIZE)
 #define REGION_OFFSET_MASK \
-  (N_BIT_MASK(LOG2_64(LINES_PER_REGION) << LOG2_64(DCACHE_LINE_SIZE)))
+  (N_BIT_MASK(LOG2_64(LINES_PER_REGION)) << LOG2_64(DCACHE_LINE_SIZE))
 #define REGION_OFFSET_OF(x) \
   (((x)&REGION_OFFSET_MASK) >> LOG2_64(DCACHE_LINE_SIZE));
 #define FIRST_OFFSET_ADDR(base, pattern) \
@@ -104,12 +104,12 @@ void pref_sms_ul1_miss(uns8 proc_id, Addr lineAddr, Addr loadPC,
 }
 
 void pref_sms_ul1_hit(uns8 proc_id, Addr lineAddr, Addr loadPC,
-                       uns32 global_hist) {
+                      uns32 global_hist) {
   pref_sms_train(lineAddr, loadPC);
 }
 
 void pref_sms_ul1_prefhit(uns8 proc_id, Addr lineAddr, Addr loadPC,
-                       uns32 global_hist) {
+                          uns32 global_hist) {
   pref_sms_train(lineAddr, loadPC);
 }
 
@@ -391,7 +391,7 @@ Flag pref_sms_fetch_region(Addr region_base) {
   for(uns ii = 0; ii < LINES_PER_REGION; ++ii) {
     uns8 proc_id = get_proc_id_from_cmp_addr(region_base);
     Addr line    = region_base + (ii * DCACHE_LINE_SIZE);
-    if(!pref_addto_dl0req_queue(proc_id, line, 0)) {
+    if(!pref_addto_ul1req_queue(proc_id, line, sms_hwp->hwp_info->id)) {
       return FALSE;
     }
   }
