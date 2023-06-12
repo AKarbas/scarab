@@ -139,6 +139,9 @@ Flag pref_sms_pht_find(Pattern_History_Table pht, Addr lineAddr, Addr loadPC,
 void pref_sms_pht_insert(Pattern_History_Table pht, Addr lineAddr, Addr loadPC,
                          uns64 pattern);
 
+// utility for pref_sms_pht_insert. stats pattern sizes.
+void stat_pht_insert_patterns(uns64 pattern);
+
 // adds a prediction to the to-fetch queue. if full, replaces oldest insert
 void pref_sms_prf_insert(Prediction_Register_File* prf, Addr base,
                          uns64 pattern);

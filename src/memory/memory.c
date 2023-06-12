@@ -4325,7 +4325,8 @@ Flag l1_fill_line(Mem_Req* req) {
     else
       STAT_EVENT(data->proc_id, NO_TOUCH_L1_REPLACE);
     // cmp FIXME prefetchers
-    pref_ul1evict(data->proc_id, repl_line_addr); // <--- EVICTION 
+    pref_ul1evict(data->proc_id, repl_line_addr);  // <--- EVICTION
+    pref_sms_end_generation(req->addr, req->loadPC);
     if(data->prefetch) {
       uns log2_distance = data->pref_distance ?
                             MIN2(LOG2(data->pref_distance), 6) :
@@ -5122,6 +5123,7 @@ L1_Data* l1_pref_cache_access(Mem_Req* req) {
 
     ASSERT(0, ADDR_TRANSLATION == ADDR_TRANS_NONE);
     cache_invalidate(&mem->pref_l1_cache, req->addr, &pref_line_addr); //<---- INVALIDATE
+    pref_sms_end_generation(req->addr, req->loadPC);
     
   }
   return data;
